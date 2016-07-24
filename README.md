@@ -16,9 +16,11 @@ Current usage:
 ``` 
     http://localhost:3011/u/<userid>
 ```
-, for example, with curl: ``` curl -i -F filedata=@myavatar.jpg http://localhost:3011/u/12345```
+
+Examples
+--------
+
+  - Read, at 256px: ```http://localhost:3011/u/12345?s=256```
+  - Write, with curl: ``` curl -i -F filedata=@myavatar.jpg http://localhost:3011/u/12345```
 
 
-Credits to additional resources
--------------------------------
-The provided default-image.png is taken from from https://commons.wikimedia.org/wiki/ , is authored by Elliot_Grieveson.png and licensed via Creative Commons Attribution-Share Alike 4.0 International 
