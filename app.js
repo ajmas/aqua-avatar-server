@@ -90,7 +90,6 @@ class AquaAvatarServer {
             // Provide a means to override the response mimetype. Introduced to deal
             // with the fact 'apng's were defaulting to application/octet-stream
             if (this.settings.mimeTypes && this.settings.mimeTypes[imageType]) {
-                console.log('def');
                 res.contentType(this.settings.mimeTypes[imageType]);
             }
 
@@ -103,7 +102,6 @@ class AquaAvatarServer {
             const tmpName = shortid.generate() + '.' + imageType;
             const outPath = this.settings.tmpDir + '/' + tmpName;
 
-            console.log('outPath', outPath);
             imagemagick.convert([avatarPath, '-resize', size, outPath], function (err, stdout) {
                 if (err) {
                     throw err;
@@ -143,7 +141,6 @@ class AquaAvatarServer {
             }
 
             let avatarFile = req.files.filedata;
-            console.log('files uploaded: ', req.files.filedata);
             avatarFile.mv(this.settings.originalsDirectory + '/' + avatarId + '.dat', function (err) {
                 if (err) {
                     res.status(500).send(err);
@@ -167,7 +164,7 @@ class AquaAvatarServer {
 
         app.use(fileUpload());
 
-        app.get(/\//, function (req, res) {
+        app.get(/^\/$/, function (req, res) {
             res.write('Aqua Avatar Server ' + version);
             res.end();
         });   

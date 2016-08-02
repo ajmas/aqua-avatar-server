@@ -1,6 +1,6 @@
 {
   "name": "aqua-avatar-server",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A simple standalone server to store and serve avatar images, scaling them as necessary",
   "main": "app.js",
   "dependencies": {
