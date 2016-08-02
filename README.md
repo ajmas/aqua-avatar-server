@@ -9,6 +9,8 @@ The REST interface was inspired by the one used by GitHub's avatar server, mainl
 
 Currently there is no security around uploads, so it will either need to be implemented or the upload path protected from external requests.
 
+Note, while it was initially desgned to be standalone, you can extend it, since the AquaAvatarServer class is exported.
+
 Contributions and suggestions are welcome.
 
 Current usage:
