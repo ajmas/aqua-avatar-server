@@ -1,6 +1,6 @@
 {
   "name": "aqua-avatar-server",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "A simple standalone server to store and serve avatar images, scaling them as necessary",
   "main": "app.js",
   "dependencies": {
@@ -8,7 +8,8 @@
     "express": "^4.14.0",
     "express-fileupload": "^0.0.5",
     "imagemagick": "^0.1.3",
-    "shortid": "^2.2.6"
+    "shortid": "^2.2.6",
+    "uuid": "^2.0.2"
   },
   "devDependencies": {},
   "scripts": {
@@ -19,10 +20,15 @@
     "type": "git",
     "url": "git+https://github.com/ajmas/aqua-avatar-server.git"
   },
-  "keywords": ["avatar", "server"],
+  "keywords": [
+    "avatar",
+    "server"
+  ],
   "author": "Andre-John Mas <andrejohn.mas@gmail.com>",
   "contributors": [],
-  "engines": { "node" : ">=4.4.7" } ,
+  "engines": {
+    "node": ">=4.4.7"
+  },
   "license": "GPL-3.0",
   "bugs": {
     "url": "https://github.com/ajmas/aqua-avatar-server/issues"

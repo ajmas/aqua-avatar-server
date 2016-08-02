@@ -58,8 +58,11 @@ class AquaAvatarServer {
         // Returns an image for the specified avatar id, defaulting to the
         app.get(/\/(.+)/, function (req, res) {
             const avatarId = req.params[0];
+            
+            let singleFrameType = true;
 
-            // Get the requested image size and
+            // Get the requested image size and deal with invalid or absent values
+
             let size = req.query['s'];
             if (size === undefined) {
                 size = this.settings.defaultImageWidth;
@@ -70,6 +73,7 @@ class AquaAvatarServer {
 
             // We default to jpg, but if the browser specifically indicates it supports
             // 'webp', then we will provide the image in that format.
+
             var imageType = 'jpg';
             if (req.get('accept').indexOf('image/webp') > -1) {
                 imageType = 'webp';
@@ -77,6 +81,7 @@ class AquaAvatarServer {
 
             // Allow image type override, though limited to a specific set
             // that we have tested
+
             if (req.query['t']) {
                 if (req.query['t'] === 'jpg') {
                     imageType = 'jpg';
@@ -88,11 +93,14 @@ class AquaAvatarServer {
             }
 
             // Provide a means to override the response mimetype. Introduced to deal
-            // with the fact 'apng's were defaulting to application/octet-stream
+            // with the fact 'apng's were defaulting to application/octet-stream            
+
             if (this.settings.mimeTypes && this.settings.mimeTypes[imageType]) {
                 res.contentType(this.settings.mimeTypes[imageType]);
             }
 
+            //
+            
             let avatarPath = this.settings.originalsDirectory + '/' + avatarId + '.dat';
 
             if (!this.fileExists(avatarPath)) {
@@ -101,8 +109,24 @@ class AquaAvatarServer {
 
             const tmpName = shortid.generate() + '.' + imageType;
             const outPath = this.settings.tmpDir + '/' + tmpName;
+            
+            // deal with issue of multi-frame files resulting in multiple
+            // files, when converted to formats that only support one frame.
 
-            imagemagick.convert([avatarPath, '-resize', size, outPath], function (err, stdout) {
+            if (imageType === 'gif' || imageType === 'apng') {
+                singleFrameType = false;
+            }
+
+            let imagemagickParams = [avatarPath, '-resize', size];
+            if (singleFrameType) {
+                imagemagickParams.push('-delete');
+                imagemagickParams.push('1--1');
+            }
+            imagemagickParams.push(outPath);
+
+            //
+
+            imagemagick.convert(imagemagickParams, function (err, stdout) {
                 if (err) {
                     throw err;
                 }
@@ -117,7 +141,7 @@ class AquaAvatarServer {
                     // send the converted file and remove it once done
                     res.sendFile(outPath, { maxAge: maxAge }, function (err) {
                         try {
-                            fs.unlinkSync(outPath);
+                            //fs.unlinkSync(outPath);
                         } catch (e) {
                             // ignore error
                         }
