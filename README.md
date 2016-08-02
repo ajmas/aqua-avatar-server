@@ -1,10 +1,11 @@
-Avatar Server
-=============
+Aqua Avatar Server
+==================
 
 A standalone nodejs based web server to store avatar images and serve them up at the requested scale. If a correspoding avatar is not found, then a default avatar is served up. If the browser supports webp, then the image is served up as webp, otherwise it is served up as jpg.
 
 Currently there is no security around uploads, so it will either need to be implemented or the upload path protected from external requests.
 
+Contributions welcome
 
 Current usage:
 
