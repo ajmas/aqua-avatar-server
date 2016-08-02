@@ -1,6 +1,6 @@
 {
   "name": "aqua-avatar-server",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A simple standalone server to store and serve avatar images, scaling them as necessary",
   "main": "app.js",
   "dependencies": {
@@ -20,7 +20,7 @@
     "url": "git+https://github.com/ajmas/aqua-avatar-server.git"
   },
   "keywords": ["avatar", "server"],
-  "author": "Andre-John Mas",
+  "author": "Andre-John Mas <andrejohn.mas@gmail.com>",
   "contributors": [],
   "engines": { "node" : ">=4.4.7" } ,
   "license": "GPL-3.0",

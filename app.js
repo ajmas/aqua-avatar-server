@@ -1,6 +1,6 @@
 'use strict'
 
-const version = '0.5.0';
+let version = 'unknown';
 
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -187,6 +187,8 @@ class AquaAvatarServer {
 // invoked from the command line, otherwise export the class.
 
 if (module.filename === process.mainModule.filename) {
+    // get the version, but only if we are launched directly
+    version = process.env.npm_package_version;
     new AquaAvatarServer().start();
 } else {
     module.exports = AquaAvatarServer;
