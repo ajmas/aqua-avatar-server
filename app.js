@@ -40,6 +40,14 @@ class AquaAvatarServer {
         if (settings) {
             Object.assign(this.settings, settings);
         }
+        this.webpAvailable = true;
+
+        this.preflight().then(function(path) {
+            console.log('debug','preflight passed');
+        }).catch(function (error) {
+            console.log('fatal','preflight failed', error);
+            process.exit();
+        });
     }
 
     /**
@@ -53,12 +61,72 @@ class AquaAvatarServer {
         }
     }
 
+
+    convert(inpath, outPath, size) {
+        var scope = this;
+
+        return new Promise(function(resolve,reject) {
+            //var outPath = '/tmp/aqua.jpg';
+
+            if (inpath) {
+                inpath = scope.settings.defaultImagePath;
+            }
+            if (!size) {
+                size = scope.settings.defaultImageWidth;;
+                size = size + 'x' + size;
+            }
+
+            let imagemagickParams = [inpath, '-resize', size];
+            imagemagickParams.push(outPath);
+
+            imagemagick.convert(imagemagickParams, function (err, stdout) {
+                if (err) {
+                    console.log('fatal', err);
+                    reject(err);
+                    return
+                }
+                resolve(outPath);
+            });
+        });
+    }
+
+    /**
+     * Do preflight tests to ensure everything is working
+     */
+    preflight() {
+        var scope = this;
+
+        var sequence = Promise.resolve();
+
+        return sequence.then(function () {
+            var outPath = '/tmp/aqua.jpg';
+            var defaultImage = scope.settings.defaultImagePath;
+
+            var size = scope.settings.defaultImageWidth;;
+            size = size + 'x' + size;
+
+            return scope.convert(defaultImage, outPath, size);
+        }).then(function () {
+            var outPath = '/tmp/aqua.webp';
+            var defaultImage = scope.settings.defaultImagePath;
+
+            var size = scope.settings.defaultImageWidth;;
+            size = size + 'x' + size;
+
+            return scope.convert(defaultImage, outPath, size).catch(function (error) {
+                console.log('warn', 'no webp capability detected, disabling');
+                scope.webpAvailable = false;
+            });
+        });
+
+    }
+
     registerHandlers(app) {
 
         // Returns an image for the specified avatar id, defaulting to the
         app.get(/\/(.+)/, function (req, res) {
             const avatarId = req.params[0];
-            
+
             let singleFrameType = true;
 
             // Get the requested image size and deal with invalid or absent values
@@ -75,7 +143,7 @@ class AquaAvatarServer {
             // 'webp', then we will provide the image in that format.
 
             var imageType = 'jpg';
-            if (req.get('accept').indexOf('image/webp') > -1) {
+            if (this.webpAvailable && req.get('accept').indexOf('image/webp') > -1) {
                 imageType = 'webp';
             }
 
@@ -93,14 +161,14 @@ class AquaAvatarServer {
             }
 
             // Provide a means to override the response mimetype. Introduced to deal
-            // with the fact 'apng's were defaulting to application/octet-stream            
+            // with the fact 'apng's were defaulting to application/octet-stream
 
             if (this.settings.mimeTypes && this.settings.mimeTypes[imageType]) {
                 res.contentType(this.settings.mimeTypes[imageType]);
             }
 
             //
-            
+
             let avatarPath = this.settings.originalsDirectory + '/' + avatarId + '.dat';
 
             if (!this.fileExists(avatarPath)) {
@@ -109,7 +177,7 @@ class AquaAvatarServer {
 
             const tmpName = shortid.generate() + '.' + imageType;
             const outPath = this.settings.tmpDir + '/' + tmpName;
-            
+
             // deal with issue of multi-frame files resulting in multiple
             // files, when converted to formats that only support one frame.
 
@@ -174,7 +242,7 @@ class AquaAvatarServer {
                 }
             });
         }.bind(this));
-     
+
     }
 
     start() {
@@ -191,7 +259,7 @@ class AquaAvatarServer {
         app.get(/^\/$/, function (req, res) {
             res.write('Aqua Avatar Server ' + version);
             res.end();
-        });   
+        });
 
         var router = express.Router();
 
