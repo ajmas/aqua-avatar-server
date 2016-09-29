@@ -19,6 +19,7 @@ const defaultSettings = {
     writeKey: '12432f23s31',
     // default 'width', but also used for the height
     defaultImageWidth: 32,
+    maxSize: 512,
     // list of mime-types, used to override default suffix mapping
     mimeTypes: {
         'apng': 'image/png'
@@ -150,6 +151,8 @@ class AquaAvatarServer {
                 size = this.settings.defaultImageWidth;
             } else if (isNaN(size)) {
                 size = this.settings.defaultImageWidth;
+            } else if (size > this.settings.maxSize) {
+                size = this.settings.maxSize;
             }
             size = size + 'x' + size;
 
