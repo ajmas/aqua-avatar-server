@@ -24,7 +24,7 @@ const defaultSettings = {
         'apng': 'image/png'
     },
     cache: {
-        maxAgeMs: 60 * 1000
+        maxAgeMs: '10m'
     }
 };
 
@@ -42,12 +42,6 @@ class AquaAvatarServer {
         }
         this.webpAvailable = true;
 
-        this.preflight().then(function(path) {
-            console.log('debug','preflight passed');
-        }).catch(function (error) {
-            console.log('fatal','preflight failed', error);
-            process.exit();
-        });
     }
 
     /**
@@ -62,7 +56,11 @@ class AquaAvatarServer {
     }
 
 
-    convert(inpath, outPath, size) {
+    /**
+     * Returns a promise. On success the value is the path
+     * of the created image.
+     */
+    convert(inpath, outPath, size, extraParams) {
         var scope = this;
 
         return new Promise(function(resolve,reject) {
@@ -71,12 +69,16 @@ class AquaAvatarServer {
             if (inpath) {
                 inpath = scope.settings.defaultImagePath;
             }
+
             if (!size) {
                 size = scope.settings.defaultImageWidth;;
                 size = size + 'x' + size;
             }
 
             let imagemagickParams = [inpath, '-resize', size];
+            if (extraParams) {
+                imagemagickParams.push(...extraParams);
+            }
             imagemagickParams.push(outPath);
 
             imagemagick.convert(imagemagickParams, function (err, stdout) {
@@ -99,6 +101,9 @@ class AquaAvatarServer {
         var sequence = Promise.resolve();
 
         return sequence.then(function () {
+            // Ensure we are able to generate a jpg from the default image
+            // This is fatal if we are unable to. We need imagemagick for this
+
             var outPath = '/tmp/aqua.jpg';
             var defaultImage = scope.settings.defaultImagePath;
 
@@ -107,6 +112,10 @@ class AquaAvatarServer {
 
             return scope.convert(defaultImage, outPath, size);
         }).then(function () {
+            // Ensure we are able to generate a webp from the default image
+            // This is non fatal if we are unable to. Given that cwebp is not
+            // available via apt-get, we can't make this a 'must have' for now.
+
             var outPath = '/tmp/aqua.webp';
             var defaultImage = scope.settings.defaultImagePath;
 
@@ -119,6 +128,11 @@ class AquaAvatarServer {
             });
         });
 
+    }
+
+    isWritePermitted(req) {
+        const remoteAddr = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        return (['::1','127.0.0.1', 'localhost','::ffff:127.0.0.1'].indexOf(remoteAddr) > -1);
     }
 
     registerHandlers(app) {
@@ -151,12 +165,29 @@ class AquaAvatarServer {
             // that we have tested
 
             if (req.query['t']) {
-                if (req.query['t'] === 'jpg') {
+                var supported = true;
+                var type = req.query['t'];
+                if (type === 'jpg') {
                     imageType = 'jpg';
-                } else if (req.query['t'] === 'gif') {
+                } else if (type === 'gif') {
                     imageType = 'gif';
-                } else if (req.query['t'] === 'apng') {
+                } else if (type === 'png') {
+                    imageType = 'png';
+                } else if (type === 'apng') {
                     imageType = 'apng';
+                } else if (type === 'webp') {
+                    if (this.webpAvailable) {
+                        imageType = 'webp';
+                    } else {
+                        supported = false;
+                    }
+                } else {
+                    supported = false;
+                }
+
+                if (!supported) {
+                    res.status(402).send('402 - Unsupported requested format ' + type);
+                    return;
                 }
             }
 
@@ -185,48 +216,52 @@ class AquaAvatarServer {
                 singleFrameType = false;
             }
 
-            let imagemagickParams = [avatarPath, '-resize', size];
+            let imagemagickParams = [];
             if (singleFrameType) {
                 imagemagickParams.push('-delete');
                 imagemagickParams.push('1--1');
             }
-            imagemagickParams.push(outPath);
 
             //
 
-            imagemagick.convert(imagemagickParams, function (err, stdout) {
-                if (err) {
-                    throw err;
-                }
+            var scope = this;
 
+            this.convert(avatarPath, outPath, size, imagemagickParams).then(function(outPath) {
                 // set the value for the maxAge header, default to zero if none specified
                 var maxAge = 0;
-                if (this.settings.cache && this.settings.cache.maxAgeMs) {
-                    maxAge = this.settings.cache.maxAgeMs;
+                if (scope.settings.cache && scope.settings.cache.maxAgeMs) {
+                    maxAge = scope.settings.cache.maxAgeMs;
                 }
 
-                if (this.fileExists(outPath)) {
+                if (scope.fileExists(outPath)) {
                     // send the converted file and remove it once done
                     res.sendFile(outPath, { maxAge: maxAge }, function (err) {
                         try {
-                            //fs.unlinkSync(outPath);
+                            fs.unlinkSync(outPath);
                         } catch (e) {
                             // ignore error
                         }
-
                     });
                 } else {
-                    res.status('415','unsupported media type');
-                    res.write('415 - unsupported media type');
-                    res.end();
+                    res.status('415').send('415 - unsupported media type');
                 }
-            }.bind(this));
+            }).catch(function(err) {
+                console.log('error',err);
+                res.status(500).end();
+            });
 
         }.bind(this));
 
         // Uploads the image
         app.post(/\/(.+)/, function (req, res) {
+
+            if (!this.isWritePermitted(req)) {
+                res.status(401).end();
+                return;
+            }
+
             const avatarId = req.params[0];
+
             if (!req.files) {
                 res.send('No files were uploaded.');
                 return;
@@ -245,29 +280,41 @@ class AquaAvatarServer {
 
     }
 
+    /**
+     * starts the server, first performing a preflight test
+     */
     start() {
-        let app = express();
+        var scope = this;
+        this.preflight().then(function(path) {
+            console.log('debug','preflight passed');
+        }).then(function() {
+            let app = express();
 
-        app.use(bodyParser.urlencoded({
-            extended: true
-        }));
+            app.use(bodyParser.urlencoded({
+                extended: true
+            }));
 
-        app.use(bodyParser.json());
+            app.use(bodyParser.json());
 
-        app.use(fileUpload());
+            app.use(fileUpload());
 
-        app.get(/^\/$/, function (req, res) {
-            res.write('Aqua Avatar Server ' + version);
-            res.end();
+            app.get(/^\/$/, function (req, res) {
+                res.write('Aqua Avatar Server ' + version);
+                res.end();
+            });
+
+            var router = express.Router();
+
+            app.use(scope.settings.basePath, router);
+
+            scope.registerHandlers(router);
+
+            app.listen(scope.settings.listeningPort);
+            console.log('debug','listening on port', scope.settings.listeningPort);
+        }).catch(function (error) {
+            console.log('fatal','preflight failed', error);
+            process.exit();
         });
-
-        var router = express.Router();
-
-        app.use(this.settings.basePath, router);
-
-        this.registerHandlers(router);
-
-        app.listen(this.settings.listeningPort);
     }
 
 }
