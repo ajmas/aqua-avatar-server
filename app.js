@@ -9,6 +9,8 @@ const os = require('os');
 const fileUpload = require('express-fileupload');
 const imagemagick = require('imagemagick');
 const shortid = require('shortid');
+const NodeCache = require( 'node-cache' );
+const imageCache = new NodeCache();
 
 const defaultSettings = {
     listeningPort: 3011,
@@ -142,6 +144,26 @@ class AquaAvatarServer {
         app.get(/\/(.+)/, function (req, res) {
             const avatarId = req.params[0];
 
+            // set the value for the maxAge header, default to zero if none specified
+            var maxAge = 0;
+            if (this.settings.cache && this.settings.cache.maxAgeMs) {
+                maxAge = this.settings.cache.maxAgeMs;
+            }
+
+            try {
+                var imagePath = imageCache.get(req.url);
+                if (this.fileExists(imagePath)) {
+                    res.sendFile(imagePath, { maxAge: maxAge }, function (err) {
+                        // do nothing
+                    });
+                    return;
+                } else {
+                    imageCache.del(req.url);
+                }
+            } catch (err) {
+                // do nothing
+            }
+
             let singleFrameType = true;
 
             // Get the requested image size and deal with invalid or absent values
@@ -201,6 +223,7 @@ class AquaAvatarServer {
                 res.contentType(this.settings.mimeTypes[imageType]);
             }
 
+
             //
 
             let avatarPath = this.settings.originalsDirectory + '/' + avatarId + '.dat';
@@ -209,7 +232,7 @@ class AquaAvatarServer {
                 avatarPath = this.settings.defaultImagePath;
             }
 
-            const tmpName = shortid.generate() + '.' + imageType;
+            const tmpName = 'aqua-' + avatarId + '-' + shortid.generate() + '.' + imageType;
             const outPath = this.settings.tmpDir + '/' + tmpName;
 
             // deal with issue of multi-frame files resulting in multiple
@@ -227,28 +250,17 @@ class AquaAvatarServer {
 
             //
 
-            var scope = this;
-
             this.convert(avatarPath, outPath, size, imagemagickParams).then(function(outPath) {
-                // set the value for the maxAge header, default to zero if none specified
-                var maxAge = 0;
-                if (scope.settings.cache && scope.settings.cache.maxAgeMs) {
-                    maxAge = scope.settings.cache.maxAgeMs;
-                }
-
-                if (scope.fileExists(outPath)) {
+                if (this.fileExists(outPath)) {
+                    imageCache.set(req.url, outPath);
                     // send the converted file and remove it once done
                     res.sendFile(outPath, { maxAge: maxAge }, function (err) {
-                        try {
-                            fs.unlinkSync(outPath);
-                        } catch (e) {
-                            // ignore error
-                        }
+                        // do nothing
                     });
                 } else {
                     res.status('415').send('415 - unsupported media type');
                 }
-            }).catch(function(err) {
+            }.bind(this)).catch(function(err) {
                 console.log('error',err);
                 res.status(500).end();
             });
@@ -257,7 +269,6 @@ class AquaAvatarServer {
 
         // Uploads the image
         app.post(/\/(.+)/, function (req, res) {
-
             if (!this.isWritePermitted(req)) {
                 res.status(401).end();
                 return;
