@@ -10,7 +10,6 @@ const fileUpload = require('express-fileupload');
 const imagemagick = require('imagemagick');
 const shortid = require('shortid');
 const NodeCache = require( 'node-cache' );
-const imageCache = new NodeCache();
 
 const defaultSettings = {
     listeningPort: 3011,
@@ -27,7 +26,8 @@ const defaultSettings = {
         'apng': 'image/png'
     },
     cache: {
-        maxAgeMs: '10m'
+        maxAgeMs: '10m',
+        ttl: 240
     }
 };
 
@@ -44,6 +44,17 @@ class AquaAvatarServer {
             Object.assign(this.settings, settings);
         }
         this.webpAvailable = true;
+
+        var ttl = 0;
+
+        if (this.settings.cache && this.settings.cache.ttl) {
+            ttl = this.settings.cache.ttl;
+        }
+
+        this.imageCache = new NodeCache({
+            stdTTL: ttl
+        });
+
 
     }
 
@@ -64,17 +75,14 @@ class AquaAvatarServer {
      * of the created image.
      */
     convert(inpath, outPath, size, extraParams) {
-        var scope = this;
 
         return new Promise(function(resolve,reject) {
-            //var outPath = '/tmp/aqua.jpg';
-
             if (inpath) {
-                inpath = scope.settings.defaultImagePath;
+                inpath = this.settings.defaultImagePath;
             }
 
             if (!size) {
-                size = scope.settings.defaultImageWidth;;
+                size = this.settings.defaultImageWidth;;
                 size = size + 'x' + size;
             }
 
@@ -92,15 +100,13 @@ class AquaAvatarServer {
                 }
                 resolve(outPath);
             });
-        });
+        }.bind(this));
     }
 
     /**
      * Do preflight tests to ensure everything is working
      */
     preflight() {
-        var scope = this;
-
         var sequence = Promise.resolve();
 
         return sequence.then(function () {
@@ -108,28 +114,28 @@ class AquaAvatarServer {
             // This is fatal if we are unable to. We need imagemagick for this
 
             var outPath = '/tmp/aqua.jpg';
-            var defaultImage = scope.settings.defaultImagePath;
+            var defaultImage = this.settings.defaultImagePath;
 
-            var size = scope.settings.defaultImageWidth;;
+            var size = this.settings.defaultImageWidth;;
             size = size + 'x' + size;
 
-            return scope.convert(defaultImage, outPath, size);
-        }).then(function () {
+            return this.convert(defaultImage, outPath, size);
+        }.bind(this)).then(function () {
             // Ensure we are able to generate a webp from the default image
             // This is non fatal if we are unable to. Given that cwebp is not
             // available via apt-get, we can't make this a 'must have' for now.
 
             var outPath = '/tmp/aqua.webp';
-            var defaultImage = scope.settings.defaultImagePath;
+            var defaultImage = this.settings.defaultImagePath;
 
-            var size = scope.settings.defaultImageWidth;;
+            var size = this.settings.defaultImageWidth;;
             size = size + 'x' + size;
 
-            return scope.convert(defaultImage, outPath, size).catch(function (error) {
+            return this.convert(defaultImage, outPath, size).catch(function (error) {
                 console.log('warn', 'no webp capability detected, disabling');
-                scope.webpAvailable = false;
-            });
-        });
+                this.webpAvailable = false;
+            }.bind(this));
+        }.bind(this));
 
     }
 
@@ -151,14 +157,14 @@ class AquaAvatarServer {
             }
 
             try {
-                var imagePath = imageCache.get(req.url);
+                var imagePath = this.imageCache.get(req.url);
                 if (this.fileExists(imagePath)) {
                     res.sendFile(imagePath, { maxAge: maxAge }, function (err) {
                         // do nothing
                     });
                     return;
                 } else {
-                    imageCache.del(req.url);
+                    this.imageCache.del(req.url);
                 }
             } catch (err) {
                 // do nothing
@@ -223,7 +229,6 @@ class AquaAvatarServer {
                 res.contentType(this.settings.mimeTypes[imageType]);
             }
 
-
             //
 
             let avatarPath = this.settings.originalsDirectory + '/' + avatarId + '.dat';
@@ -252,7 +257,7 @@ class AquaAvatarServer {
 
             this.convert(avatarPath, outPath, size, imagemagickParams).then(function(outPath) {
                 if (this.fileExists(outPath)) {
-                    imageCache.set(req.url, outPath);
+                    this.imageCache.set(req.url, outPath);
                     // send the converted file and remove it once done
                     res.sendFile(outPath, { maxAge: maxAge }, function (err) {
                         // do nothing
@@ -298,7 +303,6 @@ class AquaAvatarServer {
      * starts the server, first performing a preflight test
      */
     start() {
-        var scope = this;
         this.preflight().then(function(path) {
             console.log('debug','preflight passed');
         }).then(function() {
@@ -319,13 +323,13 @@ class AquaAvatarServer {
 
             var router = express.Router();
 
-            app.use(scope.settings.basePath, router);
+            app.use(this.settings.basePath, router);
 
-            scope.registerHandlers(router);
+            this.registerHandlers(router);
 
-            app.listen(scope.settings.listeningPort);
-            console.log('debug','listening on port', scope.settings.listeningPort);
-        }).catch(function (error) {
+            app.listen(this.settings.listeningPort);
+            console.log('debug','listening on port', this.settings.listeningPort);
+        }.bind(this)).catch(function (error) {
             console.log('fatal','preflight failed', error);
             process.exit();
         });
